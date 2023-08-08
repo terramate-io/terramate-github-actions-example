@@ -40,22 +40,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-central-1
 
-      - name: Run Terraform init on changed stacks
-        if: steps.list.outputs.stdout
-        id: init
-        run: |
-          terramate run --changed -- terraform init
-
-      - name: Run Terraform validate on changed stacks
-        if: steps.list.outputs.stdout
-        id: validate
-        run: |
-          terramate run --changed -- terraform validate
-
       - name: Create Terraform plan on changed stacks
         if: steps.list.outputs.stdout
-        id: plan
         run: |
+          terramate run --changed -- terraform init
+          terramate run --changed -- terraform validate
           terramate run --changed -- terraform plan -out out.tfplan
 
       - name: Generate Preview Comment
