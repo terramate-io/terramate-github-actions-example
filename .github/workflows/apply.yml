@@ -1,0 +1,55 @@
+name: Run Terraform Apply
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  preview:
+    name: Apply
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install tools using asdf
+        uses: asdf-vm/actions/install@v2.2.0
+
+      - name: List changed stacks
+        id: list
+        run: |
+          echo "stdout<<STDOUT" >>$GITHUB_OUTPUT
+          terramate list --changed >>$GITHUB_OUTPUT
+          EXIT_CODE=$?
+          echo "STDOUT" >>$GITHUB_OUTPUT
+          exit ${EXIT_CODE}
+
+      - name: Configure AWS Credentials
+        if: steps.list.outputs.stdout
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Run Terraform init on changed stacks
+        if: steps.list.outputs.stdout
+        id: init
+        run: |
+          terramate run --changed -- terraform init
+
+      - name: Create Terraform apply on changed stacks
+        if: steps.list.outputs.stdout
+        id: apply
+        run: |
+          terramate run --changed -- terraform apply -input=false -auto-approve

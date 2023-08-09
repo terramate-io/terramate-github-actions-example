@@ -1,0 +1,17 @@
+# Intellij
+.idea
+
+# MacOS
+.DS_STORE
+
+# VSCode configuration
+.vscode
+
+# Ignore Terraform init files
+terraform.tfstate*
+.terraform
+.terraform.lock.hcl
+
+# Ignore all files generated during CI/CD workflows
+*.tfplan
+pr-comment.txt
