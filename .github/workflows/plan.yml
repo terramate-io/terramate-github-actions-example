@@ -20,8 +20,21 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - name: Install tools using asdf
-        uses: asdf-vm/actions/install@v2.2.0
+      ### Install tooling
+
+      - name: Install Terramate
+        uses: terramate-io/terramate-action@v1
+
+      - name: Install asdf
+        uses: asdf-vm/actions/setup@v3
+
+      - name: Install Terraform with asdf
+        run: |
+          asdf plugin add terraform
+          asdf install terraform
+      
+      #    - name: Install tools using asdf
+      #   uses: asdf-vm/actions/install@v2.2.0
 
       - name: List changed stacks
         id: list
