@@ -1,0 +1,107 @@
+name: Terragrunt Preview
+
+on:
+  pull_request:
+
+jobs:
+  preview:
+    name: Plan Terragrunt changes in changed Terramate stacks
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      checks: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install Terramate
+        uses: terramate-io/terramate-action@v3
+        with:
+          version: "0.14.0"
+
+      - name: Setup Terragrunt
+        uses: autero1/action-terragrunt@v3
+        with:
+          terragrunt-version: 0.83.2
+          token: ${{ github.token }}
+
+      - name: Check Terramate formatting
+        run: terramate fmt --check
+
+      - name: Check Terragrunt formatting
+        run: terragrunt fmt --terragrunt-check
+
+      - name: List changed stacks
+        id: list
+        run: terramate list --changed
+
+      # # Comment this step out if not using AWS
+      - name: Configure AWS credentials via OIDC
+        if: steps.list.outputs.stdout
+        id: auth
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: CHANGEME_AWS_REGION
+          role-to-assume: CHANGEME_IAM_ROLE_ARN
+
+      # # Uncomment this if using Google Cloud
+      # - name: Authenticate to Google Cloud
+      #   if: steps.list.outputs.stdout
+      #   id: auth
+      #   uses: google-github-actions/auth@v2
+      #   with:
+      #     workload_identity_provider: CHANGEME_WORKLOAD_IDENTITY_PROVIDER
+      #     service_account: CHANGEME_SERVICE_ACCOUNT_EMAIL
+
+      # # Uncomment this if using Microsoft Azure
+      # - name: Configure Azure credentials
+      #   if: steps.list.outputs.stdout
+      #   id: auth
+      #   uses: azure/login@v2
+      #   with:
+      #     client-id: CHANGEME_AZURE_CLIENT_ID
+      #     tenant-id: CHANGEME_AZURE_TENANT_ID
+      #     subscription-id: CHANGEME_AZURE_SUBSCRIPTION_ID
+
+      - name: Initialize Terragrunt in changed stacks
+        if: steps.list.outputs.stdout
+        id: init
+        run: |
+          terramate run \
+           --parallel 1 \
+           --changed \
+           -- \
+           terragrunt init -lock-timeout=5m
+
+      - name: Validate Terragrunt configuration in changed stacks
+        if: steps.list.outputs.stdout
+        id: validate
+        run: |
+          terramate run \
+            --parallel 5 \
+            --changed \
+            -- \
+            terragrunt validate
+
+      - name: Plan Terragrunt changes in changed stacks
+        if: steps.list.outputs.stdout
+        id: plan
+        run: |
+          terramate run \
+            --parallel 5 \
+            --changed \
+            --sync-preview \
+            --terraform-plan-file=out.tfplan \
+            --terragrunt \
+            --continue-on-error \
+            -- \
+            terragrunt plan -out out.tfplan -detailed-exitcode -lock=false
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
