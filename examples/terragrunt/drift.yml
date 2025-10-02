@@ -1,0 +1,108 @@
+name: Scheduled Terragrunt Drift Detection
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  drift-detection:
+    name: Check Drift
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      checks: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Install Terramate
+        uses: terramate-io/terramate-action@v3
+        with:
+          version: "0.14.0"
+
+      - name: Setup Terragrunt
+        uses: autero1/action-terragrunt@v3
+        with:
+          terragrunt-version: 0.83.2
+          token: ${{ github.token }}
+
+      # # Comment this step out if not using AWS
+      - name: Configure AWS credentials via OIDC
+        id: auth
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: CHANGEME_AWS_REGION
+          role-to-assume: CHANGEME_IAM_ROLE_ARN
+
+      # # Uncomment this if using Google Cloud
+      # - name: Authenticate to Google Cloud
+      #   id: auth
+      #   uses: google-github-actions/auth@v2
+      #   with:
+      #     workload_identity_provider: CHANGEME_WORKLOAD_IDENTITY_PROVIDER
+      #     service_account: CHANGEME_SERVICE_ACCOUNT_EMAIL
+
+      # # Uncomment this if using Microsoft Azure
+      # - name: Configure Azure credentials
+      #   id: auth
+      #   uses: azure/login@v2
+      #   with:
+      #     client-id: CHANGEME_AZURE_CLIENT_ID
+      #     tenant-id: CHANGEME_AZURE_TENANT_ID
+      #     subscription-id: CHANGEME_AZURE_SUBSCRIPTION_ID
+
+      - name: Initialize Terragrunt
+        id: init
+        run: |
+          terramate run \
+           --parallel 1 \
+           -- \
+           terragrunt init -lock-timeout=5m
+
+      - name: Run drift detection
+        id: drift
+        run: |
+          terramate run \
+            --parallel 5 \
+            --sync-drift-status \
+            --continue-on-error \
+            --terraform-plan-file=drift.tfplan \
+            --terragrunt \
+            -- \
+            terragrunt plan -out drift.tfplan -detailed-exitcode -lock=false
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      # # Optional step to reconcile (apply) the drifted stacks
+      # # This only applies to stack with a `reconcile` tag by default
+      # # Uncomment if desired
+      # - name: Check for auto reconcile
+      #   id: find-drifted
+      #   run: |
+      #     terramate list \
+      #       --status=drifted \
+      #       --tags reconcile
+      #
+      # - name: Drift reconciliation
+      #   id: drift-reconcile
+      #   if: steps.find-drifted.outputs.stdout
+      #   run: |
+      #     terramate run \
+      #       --status=drifted \
+      #       --tags reconcile \
+      #       --parallel 5 \
+      #       --sync-deployment \
+      #       --terraform-plan-file=drift.tfplan \
+      #       --terragrunt \
+      #       -- \
+      #       terragrunt apply -input=false -auto-approve -lock-timeout=5m drift.tfplan
+      #   env:
+      #     GITHUB_TOKEN: ${{ github.token }}
