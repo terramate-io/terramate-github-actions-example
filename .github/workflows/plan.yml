@@ -23,10 +23,12 @@ jobs:
       ### Install tooling
 
       - name: Install Terramate
-        uses: terramate-io/terramate-action@v1
+        uses: terramate-io/terramate-action@v3
 
       - name: Install asdf
         uses: asdf-vm/actions/setup@v3
+        with:
+          asdf_branch: v0.15.0
 
       - name: Install Terraform with asdf
         run: |
@@ -36,11 +38,7 @@ jobs:
       - name: List changed stacks
         id: list
         run: |
-          echo "stdout<<STDOUT" >>$GITHUB_OUTPUT
-          terramate list --changed >>$GITHUB_OUTPUT
-          EXIT_CODE=$?
-          echo "STDOUT" >>$GITHUB_OUTPUT
-          exit ${EXIT_CODE}
+          terramate list --changed
 
       - name: Configure AWS Credentials
         if: steps.list.outputs.stdout
